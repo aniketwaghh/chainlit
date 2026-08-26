@@ -21,7 +21,18 @@ describe('Thread resume (author)', () => {
   it('resumes own thread, composer visible, can continue chatting', () => {
     login('alice');
 
-    // Start a thread and let the first turn finish before reloading
+    // `on_chat_start` sends its welcome message asynchronously. While the
+    // message list is empty `WelcomeScreen` renders the composer and `Footer`
+    // renders nothing; the first message flips `hasMessage()` and swaps which
+    // of the two owns it, remounting the input. Wait for that swap before
+    // typing, or the typed value is dropped mid-`type()`.
+    cy.get("[data-step-type='assistant_message']").should(
+      'contain',
+      'Welcome, say hi to start!'
+    );
+
+    // Start a thread and let the first turn finish, so the data layer has
+    // persisted it and there is a history for resume to replay.
     submitMessage('hi');
     cy.location('pathname').should('match', /\/thread\//);
     cy.get("[data-step-type='assistant_message']").should(
@@ -36,15 +47,17 @@ describe('Thread resume (author)', () => {
     cy.get('#message-composer').should('be.visible');
     cy.get('[data-testid="read-only-banner"]').should('not.exist');
 
-    // `#message-composer` turns visible before the thread has finished
-    // hydrating. Wait for the `@cl.on_chat_resume` message to land and for the
-    // task to end (the composer shows a stop button while one is running),
-    // otherwise the send button re-renders under the click.
+    // `#message-composer` is visible well before the thread has hydrated. The
+    // backend's resume path emits, in order: the `@cl.on_chat_resume` message,
+    // then `resume_thread` with the persisted history -- and the client's
+    // `resume_thread` handler *replaces* the whole message list with it. So
+    // `Echo: hi` can only come from that replay, which is the last write to
+    // the list; once it is on screen every resume event has landed and the
+    // composer has stopped remounting.
     cy.get("[data-step-type='assistant_message']").should(
       'contain',
-      'Resumed:'
+      'Echo: hi'
     );
-    cy.get('#stop-button').should('not.exist');
 
     // Continue chatting
     submitMessage('still here');

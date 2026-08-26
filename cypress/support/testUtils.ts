@@ -8,13 +8,15 @@ Cypress.on('uncaught:exception', (err) => {
   }
 });
 
-// An assertion terminates a query chain: `.should()` freezes the element it
-// resolved, so a following action command acts on that stale node instead of
-// re-querying it. When React re-renders in between (the composer swaps its send
-// button for a stop button while a task is running), the node is detached and
-// the action fails. Assert first, then re-query for the action so Cypress keeps
-// retrying the query itself.
-// https://docs.cypress.io/app/core-concepts/retry-ability
+// The composer is re-rendered by React while a message round-trip is in flight,
+// so the input and the send button can be replaced between the two actions
+// below. Cypress retries queries but never re-runs an action command, so the
+// docs recommend a separate `cy.get()` per action rather than one chain:
+// "Call cy.get() separately for each action if the DOM node might be replaced
+// between steps." -- https://docs.cypress.io/app/core-concepts/retry-ability
+// ("Use separate queries for re-rendering elements"); see also
+// https://docs.cypress.io/app/core-concepts/interacting-with-elements
+// ("Detached").
 export function submitMessage(message: string) {
   cy.get('#chat-input').should('be.visible').should('not.be.disabled');
   cy.get('#chat-input').type(message);
