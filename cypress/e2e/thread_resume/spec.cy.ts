@@ -21,9 +21,13 @@ describe('Thread resume (author)', () => {
   it('resumes own thread, composer visible, can continue chatting', () => {
     login('alice');
 
-    // Start a thread
+    // Start a thread and let the first turn finish before reloading
     submitMessage('hi');
     cy.location('pathname').should('match', /\/thread\//);
+    cy.get("[data-step-type='assistant_message']").should(
+      'contain',
+      'Echo: hi'
+    );
 
     // Reload to trigger resume
     cy.reload();
@@ -31,6 +35,16 @@ describe('Thread resume (author)', () => {
     // Composer present and no read-only banner
     cy.get('#message-composer').should('be.visible');
     cy.get('[data-testid="read-only-banner"]').should('not.exist');
+
+    // `#message-composer` turns visible before the thread has finished
+    // hydrating. Wait for the `@cl.on_chat_resume` message to land and for the
+    // task to end (the composer shows a stop button while one is running),
+    // otherwise the send button re-renders under the click.
+    cy.get("[data-step-type='assistant_message']").should(
+      'contain',
+      'Resumed:'
+    );
+    cy.get('#stop-button').should('not.exist');
 
     // Continue chatting
     submitMessage('still here');

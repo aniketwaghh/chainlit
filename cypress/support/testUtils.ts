@@ -8,16 +8,23 @@ Cypress.on('uncaught:exception', (err) => {
   }
 });
 
+// An assertion terminates a query chain: `.should()` freezes the element it
+// resolved, so a following action command acts on that stale node instead of
+// re-querying it. When React re-renders in between (the composer swaps its send
+// button for a stop button while a task is running), the node is detached and
+// the action fails. Assert first, then re-query for the action so Cypress keeps
+// retrying the query itself.
+// https://docs.cypress.io/app/core-concepts/retry-ability
 export function submitMessage(message: string) {
-  cy.get('#chat-input')
-    .should('be.visible')
-    .should('not.be.disabled')
-    .type(message);
-  cy.get('#chat-submit').should('not.be.disabled').click();
+  cy.get('#chat-input').should('be.visible').should('not.be.disabled');
+  cy.get('#chat-input').type(message);
+  cy.get('#chat-submit').should('not.be.disabled');
+  cy.get('#chat-submit').click();
 }
 
 export function openHistory() {
-  cy.get(`#chat-input`).should('not.be.disabled').type(`{upArrow}`);
+  cy.get(`#chat-input`).should('not.be.disabled');
+  cy.get(`#chat-input`).type(`{upArrow}`);
 }
 
 export function closeHistory() {
