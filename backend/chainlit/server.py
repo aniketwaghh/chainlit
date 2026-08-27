@@ -1433,7 +1433,7 @@ async def connect_mcp(
         get_default_environment,
         stdio_client,
     )
-    from mcp.client.streamable_http import streamablehttp_client
+    from mcp.client.streamable_http import streamable_http_client
 
     from chainlit.config import SseMcpServer, StdioMcpServer, StreamableHttpMcpServer
     from chainlit.context import init_ws_context
@@ -1449,6 +1449,7 @@ async def connect_mcp(
         _destination_in_allowlist,
         _destination_on_origin,
         make_mcp_http_client_factory,
+        make_mcp_streamable_http_client,
         validate_mcp_headers,
         validate_mcp_url,
     )
@@ -1676,14 +1677,21 @@ async def connect_mcp(
                     )
                 elif isinstance(mcp_connection, HttpMcpConnection):
                     assert mcp_http_client_factory is not None
-                    # NOTE: streamablehttp_client is deprecated from mcp 1.24.0
-                    # (renamed streamable_http_client, taking http_client= instead
-                    # of a factory) and removed in 2.0.0 — update this on bump.
-                    transport = await exit_stack.enter_async_context(
-                        streamablehttp_client(
-                            url=mcp_connection.url,
+                    # streamable_http_client takes a ready-made client rather
+                    # than a factory, and only closes one it created itself, so
+                    # this one is ours to close. Entered before the transport so
+                    # the exit stack unwinds it last — terminate_on_close sends a
+                    # DELETE through it while the transport is shutting down.
+                    http_client = await exit_stack.enter_async_context(
+                        make_mcp_streamable_http_client(
+                            mcp_http_client_factory,
                             headers=mcp_connection.headers,
-                            httpx_client_factory=mcp_http_client_factory,
+                        )
+                    )
+                    transport = await exit_stack.enter_async_context(
+                        streamable_http_client(
+                            url=mcp_connection.url,
+                            http_client=http_client,
                         )
                     )
                 else:
