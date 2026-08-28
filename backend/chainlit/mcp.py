@@ -138,9 +138,12 @@ def validate_mcp_url(url: str, allowed_urls: list[str]) -> None:
             "Configure features.mcp.user_servers.allowed_urls in your config."
         )
 
-    # Parse the request URL through httpx, which is what the MCP transports
-    # dispatch with. Validating anything else risks approving a URL that
-    # differs from the one that actually goes on the wire.
+    # Parse with chainlit's own httpx rather than the installed SDK's flavour
+    # (httpx on mcp<2, httpx2 on mcp>=2). Deliberate: URL parsing showed zero
+    # divergence between the two across traversal, IDN, userinfo, port and
+    # encoded-separator cases, and validating anything other than what the
+    # transport actually dispatches with risks approving a URL that differs
+    # from the one that goes on the wire.
     try:
         parsed = httpx.URL(url)
     except Exception as exc:
@@ -334,7 +337,7 @@ def make_mcp_http_client_factory(
 
         return http.AsyncClient(
             follow_redirects=False,
-            timeout=timeout if timeout is not None else http.Timeout(30.0),
+            timeout=timeout if timeout is not None else http.Timeout(_MCP_HTTP_TIMEOUT),
             headers=headers,
             auth=auth,
             event_hooks={"request": [_check_request]},

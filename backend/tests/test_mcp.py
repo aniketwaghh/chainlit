@@ -806,7 +806,12 @@ class TestMakeMcpStreamableHttpClient:
         )
         try:
             hook = client.event_hooks["request"][0]
-            await hook(httpx.Request("GET", "https://example.com/anything"))
+            # Built from the same resolved module as the client itself
+            # (httpx on mcp<2, httpx2 on mcp>=2) so this exercises the
+            # request flavour the transport actually hands the hook, not
+            # whichever one happens to be importable.
+            request = _mcp_http_module().Request("GET", "https://example.com/anything")
+            await hook(request)
         finally:
             await client.aclose()
 
@@ -985,9 +990,13 @@ def mock_mcp_transport(monkeypatch: pytest.MonkeyPatch):
 
     @asynccontextmanager
     async def fake_streamable_http_client(url, http_client=None, **kwargs):
+        # Real mcp>=2 streamable_http_client yields a 2-tuple (the
+        # get_session_id callable from 1.x is gone); matching that shape here
+        # means a stray transport[2] fails this test instead of only failing
+        # against the real 2.x transport.
         captured["url"] = url
         captured["http_client"] = http_client
-        yield (AsyncMock(), AsyncMock(), AsyncMock())
+        yield (AsyncMock(), AsyncMock())
 
     monkeypatch.setattr("mcp.client.sse.sse_client", fake_sse_client)
     monkeypatch.setattr(
