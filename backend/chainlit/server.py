@@ -10,7 +10,7 @@ import urllib.parse
 import webbrowser
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 import socketio
 from fastapi import (
@@ -1659,7 +1659,13 @@ async def connect_mcp(
                         sse_client(
                             url=mcp_connection.url,
                             headers=mcp_connection.headers,
-                            httpx_client_factory=mcp_http_client_factory,
+                            # The factory builds its client from whichever HTTP
+                            # library the installed SDK dispatches with, which is
+                            # only known at runtime (see _mcp_http_module). Under
+                            # mcp>=2 that is httpx2, so the httpx-flavoured
+                            # annotation no longer matches the SDK's parameter
+                            # type even though the object is the right one.
+                            httpx_client_factory=cast(Any, mcp_http_client_factory),
                         )
                     )
                 elif isinstance(mcp_connection, StdioMcpConnection):
@@ -1691,7 +1697,8 @@ async def connect_mcp(
                     transport = await exit_stack.enter_async_context(
                         streamable_http_client(
                             url=mcp_connection.url,
-                            http_client=http_client,
+                            # Same runtime-flavour mismatch as the SSE branch.
+                            http_client=cast(Any, http_client),
                         )
                     )
                 else:

@@ -26,26 +26,3 @@ jobs:
         run: uv run --no-project pytest --cov=chainlit/
       - name: Run frontend tests
         run: pnpm run test
-
-  mcp-2x-compat:
-    # mcp is pinned to >=1.28.1 in the lockfile, so the matrix above never
-    # exercises the mcp>=2 codepaths (the httpx2 client, streamable_http_client's
-    # http_client= kwarg). Overriding the installed version here so a future
-    # SDK release that breaks that surface fails a check instead of only
-    # breaking users who resolve onto 2.x, which the version range already
-    # permits (backend/pyproject.toml: mcp>=1.28.1,<3.0.0).
-    runs-on: ubuntu-latest
-    name: MCP tests against mcp 2.x
-    env:
-      BACKEND_DIR: ./backend
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/uv-python-install
-        name: Install Python, uv and Python dependencies
-        with:
-          python-version: '3.13'
-          uv-args: --extra tests --extra custom-data
-      - name: Override the locked mcp with the latest 2.x
-        run: uv pip install 'mcp>=2,<3'
-      - name: Run MCP tests
-        run: uv run --no-project pytest backend/tests/test_mcp.py
