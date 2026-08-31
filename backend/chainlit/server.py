@@ -1452,8 +1452,11 @@ async def connect_mcp(
         make_mcp_streamable_http_client,
         validate_mcp_headers,
         validate_mcp_url,
+        warn_if_mcp_1x,
     )
     from chainlit.session import McpSession, WebsocketSession, stop_mcp_task
+
+    warn_if_mcp_1x()
 
     session = WebsocketSession.get_by_id(payload.sessionId)
     context = init_ws_context(session)

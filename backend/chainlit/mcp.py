@@ -1,4 +1,3 @@
-import warnings
 from importlib.metadata import version
 from types import ModuleType
 from typing import Callable, Dict, Literal, Optional, Union
@@ -6,6 +5,8 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 from pydantic import BaseModel
+
+from chainlit.logger import logger
 
 
 class StdioMcpConnection(BaseModel):
@@ -257,26 +258,41 @@ _MCP_HTTP_TIMEOUT = 30.0
 _MCP_HTTP_SSE_READ_TIMEOUT = 300.0
 
 
-def _warn_if_mcp_1x() -> None:
-    """Warn once, at import, when the resolved MCP SDK is still on 1.x.
+_mcp_1x_notice_emitted = False
+
+
+def warn_if_mcp_1x() -> None:
+    """Log once, on first MCP use, when the resolved SDK is still on 1.x.
 
     chainlit supports ``mcp>=1.28.1,<3.0.0`` but only resolves and tests
     against 2.x. 1.x still works today and the floor is deliberately left
     where it is, so this is a heads-up rather than a breakage: the intent is
     to raise the floor to ``>=2`` once 1.x stops being worth carrying, and
     anyone pinned below that wants notice before it happens.
+
+    Logged rather than raised as a ``DeprecationWarning`` for two reasons.
+    Python's default filters hide ``DeprecationWarning`` outside ``__main__``,
+    so from a library module the notice would never reach the users it is for.
+    And a warning raised while ``chainlit`` is being imported becomes an
+    exception under ``PYTHONWARNINGS=error``, which would turn a deprecation
+    notice into a hard import failure for the 1.x users it targets. Called
+    from the MCP connection path so it costs nothing for apps that never use
+    MCP.
     """
-    if version("mcp").startswith("1."):
-        warnings.warn(
-            "chainlit resolved mcp 1.x. Support for mcp<2 is deprecated and "
-            "will be removed in a future release; pin mcp>=2 to stay ahead "
-            "of it.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+    global _mcp_1x_notice_emitted
 
+    if _mcp_1x_notice_emitted:
+        return
+    installed = version("mcp")
+    if not installed.startswith("1."):
+        return
 
-_warn_if_mcp_1x()
+    _mcp_1x_notice_emitted = True
+    logger.warning(
+        "chainlit resolved mcp %s. Support for mcp<2 is deprecated and will be "
+        "removed in a future release; pin mcp>=2 to stay ahead of it.",
+        installed,
+    )
 
 
 def _mcp_http_module() -> ModuleType:

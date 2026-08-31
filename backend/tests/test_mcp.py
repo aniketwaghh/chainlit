@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import inspect
 import logging
 import time
@@ -2586,3 +2587,60 @@ class TestProjectSettingsMcpHygiene:
             assert "command" not in server
             assert "url" not in server
             assert "headers" not in server
+
+
+@pytest.mark.parametrize(
+    ("installed", "expected"),
+    [("1.29.1", True), ("1.28.1", True), ("2.1.1", False), ("2.0.0", False)],
+)
+def test_mcp_1x_notice_is_logged_only_for_1x(monkeypatch, caplog, installed, expected):
+    """The 1.x deprecation notice has to actually reach the user.
+
+    It is logged rather than raised as a DeprecationWarning because Python's
+    default filters hide that category outside __main__, so a warnings-based
+    notice from this module would be invisible to the 1.x users it is for.
+    """
+    import chainlit.mcp as mcp_module
+
+    monkeypatch.setattr(mcp_module, "_mcp_1x_notice_emitted", False)
+    monkeypatch.setattr(mcp_module, "version", lambda _: installed)
+
+    with caplog.at_level(logging.WARNING, logger="chainlit"):
+        mcp_module.warn_if_mcp_1x()
+
+    emitted = [r for r in caplog.records if "mcp<2 is deprecated" in r.getMessage()]
+    assert bool(emitted) is expected
+    if expected:
+        assert installed in emitted[0].getMessage()
+
+
+def test_mcp_1x_notice_is_logged_once(monkeypatch, caplog):
+    """Repeated MCP connections must not repeat the notice."""
+    import chainlit.mcp as mcp_module
+
+    monkeypatch.setattr(mcp_module, "_mcp_1x_notice_emitted", False)
+    monkeypatch.setattr(mcp_module, "version", lambda _: "1.29.1")
+
+    with caplog.at_level(logging.WARNING, logger="chainlit"):
+        mcp_module.warn_if_mcp_1x()
+        mcp_module.warn_if_mcp_1x()
+        mcp_module.warn_if_mcp_1x()
+
+    emitted = [r for r in caplog.records if "mcp<2 is deprecated" in r.getMessage()]
+    assert len(emitted) == 1
+
+
+def test_importing_chainlit_emits_no_warning_on_mcp_1x():
+    """Importing chainlit must not warn, whatever the resolved SDK.
+
+    A warning raised during import becomes an exception under
+    PYTHONWARNINGS=error, which would make a deprecation notice a hard import
+    failure for the 1.x users it targets.
+    """
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        importlib.reload(importlib.import_module("chainlit.mcp"))
+
+    assert [w for w in caught if "mcp<2" in str(w.message)] == []
